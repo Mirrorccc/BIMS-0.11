@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仪表板 - 电站锅炉信息管理系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css">
+    <!-- 添加图表库 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body style="display: block;">
+    <div class="dashboard">
+        <!-- 侧边栏导航 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <i class="fa fa-fire"></i> 电站锅炉管理系统
+            </div>
+            <ul class="nav-menu" id="navMenu">
+                <li class="nav-item active" data-page="overview">
+                    <span><i class="fa fa-pie-chart"></i> 系统概览</span>
+                </li>
+                <li class="nav-item" data-page="device" data-require="can_manage_device">
+                    <span><i class="fa fa-cog"></i> 设备中心</span>
+                    <ul class="nav-submenu">
+                        <li class="submenu-item" data-page="deviceBasicParams">设备列表</li>
+                    </ul>
+                </li>
+                <li class="nav-item" data-page="personnel" data-require="can_view_personnel">
+                    <span><i class="fa fa-user"></i> 人员管理</span>
+                </li>
+                <li class="nav-item" data-page="analysis" data-require="can_view_reports">
+                    <span><i class="fa fa-line-chart"></i> 数据分析</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- 主要内容区域 -->
+        <div class="main-content">
+            <div class="main-header">
+                <h2 id="pageTitle">系统概览</h2>
+                <div class="user-info">
+                    <span id="username"></span>
+                    <span id="userRole" class="user-role"></span>
+                    <button class="btn btn-danger" onclick="logout()">退出登录</button>
+                </div>
+            </div>
+
+            <!-- 概览页面 -->
+            <div id="overviewPage" class="page active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="label">设备总数</div>
+                        <div class="value">12</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">运行设备</div>
+                        <div class="value">8</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">预警信息</div>
+                        <div class="value">2</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">本月故障数</div>
+                        <div class="value">3</div>
+                    </div>
+                </div>
+
+                <!-- 预警信息 -->
+                <div class="card">
+                    <h3 class="card-title">最新预警信息</h3>
+                    <div class="alert alert-warning">
+                        锅炉1号机组温度过高，请注意检查！
+                    </div>
+                    <div class="alert alert-danger">
+                        2号给水泵压力异常，需要立即处理！
+                    </div>
+                </div>
+
+                <!-- 运行状态图表 -->
+                <div class="card">
+                    <h3 class="card-title">设备运行状态</h3>
+                    <div id="deviceStatusChart" class="chart-container"></div>
+                </div>
+
+                <!-- 能耗趋势图表 -->
+                <div class="card">
+                    <h3 class="card-title">能耗趋势分析</h3>
+                    <div id="energyTrendChart" class="chart-container"></div>
+                </div>
+            </div>
+
+            <!-- 人员管理页面 -->
+            <div id="personnelPage" class="page" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">人员管理</h3>
+                        <div class="header-actions">
+                            <!-- 添加搜索表单 -->
+                            <div class="search-form">
+                                <input type="text" id="searchKeyword" class="form-control" placeholder="搜索工号/姓名/部门">
+                                <select id="searchDepartment" class="form-control">
+                                    <option value="">所有部门</option>
+                                    <option value="信息部">信息部</option>
+                                    <option value="技术部">技术部</option>
+                                    <option value="运行部">运行部</option>
+                                    <option value="维修部">维修部</option>
+                                </select>
+                                <button class="btn btn-primary" onclick="searchPersonnel()">搜索</button>
+                                <button class="btn btn-default" onclick="resetSearch()">重置</button>
+                                <button class="btn btn-primary" onclick="showAddPersonnelModal()">添加人员</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>工号</th>
+                                    <th>姓名</th>
+                                    <th>部门</th>
+                                    <th>职位</th>
+                                    <th>联系电话</th>
+                                    <th>电子邮箱</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="personnelTableBody">
+                                <!-- 数据将通过JavaScript动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- 设备基本参数管理页面 -->
+            <div id="deviceBasicParamsPage" class="page" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">设备列表</h3>
+                        <div class="header-actions">
+                            <!-- 添加搜索表单 -->
+                            <div class="search-form">
+                                <input type="text" id="deviceSearchKeyword" class="form-control" placeholder="搜索设备名称/编号">
+                                <select id="deviceTypeFilter" class="form-control">
+                                    <option value="">所有类型</option>
+                                    <option value="锅炉">锅炉</option>
+                                    <option value="燃烧器">燃烧器</option>
+                                    <option value="空气预热器">空气预热器</option>
+                                    <option value="给水泵">给水泵</option>
+                                    <option value="引风机">引风机</option>
+                                    <option value="送风机">送风机</option>
+                                    <option value="一次风机与煤粉机">一次风机与煤粉机</option>
+                                    <option value="磨煤机">磨煤机</option>
+                                    <option value="给煤机">给煤机</option>
+                                    <option value="给粉机">给粉机</option>
+                                    <option value="吹灰器">吹灰器</option>
+                                </select>
+                                <select id="statusFilter" class="form-control">
+                                    <option value="">所有状态</option>
+                                    <option value="正常运行">正常运行</option>
+                                    <option value="故障">故障</option>
+                                    <option value="维修中">维修中</option>
+                                    <option value="待机">待机</option>
+                                </select>
+                                <button class="btn btn-primary" onclick="searchDevices()">搜索</button>
+                                <button class="btn btn-default" onclick="resetDeviceSearch()">重置</button>
+                                <button class="btn btn-primary" onclick="showAddDeviceModal()">添加设备</button>
+                    </div>
+                    </div>
+                </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>设备名称</th>
+                                    <th>设备编号</th>
+                                    <th>设备类型</th>
+                                    <th>状态</th>
+                                    <th>负责人</th>
+                                    <th>添加时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="deviceTableBody">
+                                <!-- 数据将通过JavaScript动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="devicePagination">
+                        <!-- 分页控件将通过JavaScript动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑人员模态框 -->
+    <div id="personnelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">添加人员</h3>
+                <span class="close" onclick="closePersonnelModal()">&times;</span>
+            </div>
+            <form id="personnelForm" onsubmit="handlePersonnelSubmit(event)">
+                <input type="hidden" id="editMode" value="add">
+                <div class="form-group">
+                    <label for="employeeId">工号</label>
+                    <input type="text" id="employeeId" class="form-control" required pattern="[A-Za-z0-9]+" title="工号只能包含字母和数字">
+                </div>
+                <div class="form-group">
+                    <label for="name">姓名</label>
+                    <input type="text" id="name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="department">部门</label>
+                    <select id="department" class="form-control" required>
+                        <option value="信息部">信息部</option>
+                        <option value="技术部">技术部</option>
+                        <option value="运行部">运行部</option>
+                        <option value="维修部">维修部</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="position">职位</label>
+                    <input type="text" id="position" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="phone">联系电话</label>
+                    <input type="tel" id="phone" class="form-control" pattern="[0-9]{11}" title="请输入11位手机号码">
+                </div>
+                <div class="form-group">
+                    <label for="email">电子邮箱</label>
+                    <input type="email" id="email" class="form-control">
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="button" class="btn btn-default" onclick="closePersonnelModal()">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 设备详情模态框 -->
+    <div id="deviceDetailModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 id="deviceDetailTitle">设备详情</h3>
+                <span class="close" onclick="closeDeviceDetailModal()">&times;</span>
+            </div>
+            <div class="device-detail-content">
+                <div class="detail-section">
+                    <h4>基本信息</h4>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="label">设备名称:</span>
+                            <span id="detail_device_name" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">设备编号:</span>
+                            <span id="detail_device_number" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">设备类型:</span>
+                            <span id="detail_device_type" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">设备负责人:</span>
+                            <span id="detail_responsible_person" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">添加时间:</span>
+                            <span id="detail_create_time" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">最后更新:</span>
+                            <span id="detail_update_time" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">设备品牌:</span>
+                            <span id="detail_brand" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">设备型号:</span>
+                            <span id="detail_model" class="value"></span>
+                        </div>
+                    </div>
+                    <div class="device-image-container">
+                        <img id="detail_device_image" class="device-image" src="" alt="设备图片" onerror="this.onerror=null;this.src='/static/images/no-image.png';">
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4>运行状态</h4>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="label">设备状态:</span>
+                            <span id="detail_status" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">安装位置:</span>
+                            <span id="detail_location" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">运行时间:</span>
+                            <span id="detail_running_time" class="value"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4>维护与管理</h4>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="label">采购日期:</span>
+                            <span id="detail_purchase_date" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">投运日期:</span>
+                            <span id="detail_operation_date" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">保修期:</span>
+                            <span id="detail_warranty_period" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">供应商信息:</span>
+                            <span id="detail_supplier_info" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">维护负责人:</span>
+                            <span id="detail_maintenance_person" class="value"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">维护周期:</span>
+                            <span id="detail_maintenance_cycle" class="value"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4>附加信息</h4>
+                    <div class="detail-grid">
+                        <div class="detail-item full-width">
+                            <span class="label">备注:</span>
+                            <span id="detail_notes" class="value"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑设备模态框 -->
+    <div id="deviceModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 id="deviceModalTitle">添加设备</h3>
+                <span class="close" onclick="closeDeviceModal()">&times;</span>
+            </div>
+            <form id="deviceForm" onsubmit="handleDeviceSubmit(event)">
+                <input type="hidden" id="deviceEditMode" value="add">
+                <input type="hidden" id="deviceId" value="">
+                
+                <div class="form-tabs">
+                    <div class="tab-header">
+                        <div class="tab active" data-tab="basic">基本信息</div>
+                        <div class="tab" data-tab="status">运行状态</div>
+                        <div class="tab" data-tab="maintenance">维护与管理</div>
+                        <div class="tab" data-tab="additional">附加信息</div>
+                    </div>
+                    
+                    <div class="tab-content active" data-tab="basic">
+                        <div class="form-group">
+                            <label for="deviceName">设备名称 <span class="required">*</span></label>
+                            <input type="text" id="deviceName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="deviceNumber">设备编号 <span class="required">*</span></label>
+                            <input type="text" id="deviceNumber" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="deviceType">设备类型 <span class="required">*</span></label>
+                            <select id="deviceType" class="form-control" required>
+                                <option value="锅炉">锅炉</option>
+                                <option value="燃烧器">燃烧器</option>
+                                <option value="空气预热器">空气预热器</option>
+                                <option value="给水泵">给水泵</option>
+                                <option value="引风机">引风机</option>
+                                <option value="送风机">送风机</option>
+                                <option value="一次风机与煤粉机">一次风机与煤粉机</option>
+                                <option value="磨煤机">磨煤机</option>
+                                <option value="给煤机">给煤机</option>
+                                <option value="给粉机">给粉机</option>
+                                <option value="吹灰器">吹灰器</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="responsiblePerson">设备负责人</label>
+                            <input type="text" id="responsiblePerson" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="brand">设备品牌</label>
+                            <input type="text" id="brand" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="model">设备型号</label>
+                            <input type="text" id="model" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="imagePath">设备图片</label>
+                            <input type="file" id="imagePath" class="form-control">
+                            <div id="imagePreview" class="image-preview"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" data-tab="status">
+                        <div class="form-group">
+                            <label for="status">设备状态</label>
+                            <select id="status" class="form-control">
+                                <option value="正常运行">正常运行</option>
+                                <option value="故障">故障</option>
+                                <option value="维修中">维修中</option>
+                                <option value="待机">待机</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="location">安装位置</label>
+                            <input type="text" id="location" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <p class="form-help">注意：运行时间将根据投运日期和设备状态自动计算，无需手动填写。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" data-tab="maintenance">
+                        <div class="form-group">
+                            <label for="purchaseDate">采购日期</label>
+                            <input type="date" id="purchaseDate" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="operationDate">投运日期</label>
+                            <input type="date" id="operationDate" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="warrantyPeriod">保修期</label>
+                            <input type="text" id="warrantyPeriod" class="form-control" placeholder="例如：12个月">
+                        </div>
+                        <div class="form-group">
+                            <label for="supplierInfo">供应商信息</label>
+                            <textarea id="supplierInfo" class="form-control" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="maintenancePerson">维护负责人</label>
+                            <input type="text" id="maintenancePerson" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="maintenanceCycle">维护周期</label>
+                            <input type="text" id="maintenanceCycle" class="form-control" placeholder="例如：6个月">
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" data-tab="additional">
+                        <div class="form-group">
+                            <label for="notes">备注</label>
+                            <textarea id="notes" class="form-control" rows="6"></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="button" class="btn btn-default" onclick="closeDeviceModal()">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 获取用户信息并显示
+        function loadUserInfo() {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const token = localStorage.getItem('token');
+            
+            // 检查是否有用户信息和token
+            if (!user.username || !token) {
+                // 如果没有登录信息，重定向到登录页面
+                window.location.href = '/';
+                return;
+            }
+            
+            document.getElementById('username').textContent = user.username || '';
+            
+            // 设置角色标签样式
+            const userRoleElement = document.getElementById('userRole');
+            userRoleElement.textContent = user.role || '';
+            
+            // 添加角色特定的样式类
+            const roleClasses = {
+                '系统管理员': 'role-admin',
+                '技术主管': 'role-tech',
+                '操作员': 'role-operator',
+                '维护工程师': 'role-engineer'
+            };
+            userRoleElement.classList.add(roleClasses[user.role] || '');
+            
+            // 根据用户角色控制菜单显示
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems.forEach(item => {
+                const requiredPermission = item.getAttribute('data-require');
+                if (requiredPermission) {
+                    // 检查用户是否有权限
+                    const hasPermission = checkPermission(user.role, requiredPermission);
+                    if (!hasPermission) {
+                        item.style.display = 'none';
+                    }
+                }
+            });
+        }
+
+        // 检查权限
+        function checkPermission(role, permission) {
+            // 系统管理员拥有所有权限
+            if (role === '系统管理员') return true;
+
+            // 根据角色和权限检查
+            const rolePermissions = {
+                '系统管理员': ['can_edit_personnel', 'can_manage_device', 'can_view_reports'],
+                '技术主管': ['can_edit_personnel', 'can_view_reports'],
+                '操作员': ['can_view_reports'],
+                '维护工程师': ['can_manage_device', 'can_view_reports']
+            };
+
+            return rolePermissions[role]?.includes(permission) || false;
+        }
+
+        // 初始化图表
+        function initCharts() {
+            // 设备运行状态图表
+            const statusChart = echarts.init(document.getElementById('deviceStatusChart'));
+            statusChart.setOption({
+                title: {
+                    text: '设备运行状态分布'
+                },
+                tooltip: {
+                    trigger: 'item'
+                },
+                legend: {
+                    orient: 'vertical',
+                    left: 'left'
+                },
+                series: [{
+                    name: '运行状态',
+                    type: 'pie',
+                    radius: '50%',
+                    data: [
+                        {value: 8, name: '正常运行'},
+                        {value: 2, name: '待机'},
+                        {value: 1, name: '维护中'},
+                        {value: 1, name: '故障'}
+                    ],
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    }
+                }]
+            });
+
+            // 能耗趋势图表
+            const energyChart = echarts.init(document.getElementById('energyTrendChart'));
+            energyChart.setOption({
+                title: {
+                    text: '近7天能耗趋势'
+                },
+                tooltip: {
+                    trigger: 'axis'
+                },
+                xAxis: {
+                    type: 'category',
+                    data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: [{
+                    name: '能耗',
+                    type: 'line',
+                    data: [820, 932, 901, 934, 1290, 1330, 1320]
+                }]
+            });
+
+            // 监听窗口大小变化，调整图表大小
+            window.addEventListener('resize', function() {
+                statusChart.resize();
+                energyChart.resize();
+            });
+        }
+
+        // 导航菜单交互
+        function initNavigation() {
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems.forEach(item => {
+                if (item.style.display !== 'none') {
+                    item.addEventListener('click', function() {
+                        // 处理子菜单的显示/隐藏
+                        if (this.querySelector('.nav-submenu')) {
+                            // 如果当前项有子菜单，则切换expanded类
+                            this.classList.toggle('expanded');
+                            
+                            // 移除所有菜单项的激活状态
+                            navItems.forEach(i => {
+                                i.classList.remove('active');
+                            });
+                            
+                            // 设置当前菜单项为激活状态
+                            this.classList.add('active');
+                        } else {
+                            // 如果没有子菜单，则正常切换页面
+                            navItems.forEach(i => {
+                                i.classList.remove('active');
+                                // 如果不是当前点击的项，则移除expanded类
+                                if (i !== this) {
+                                    i.classList.remove('expanded');
+                                }
+                            });
+                            this.classList.add('active');
+                            const page = this.getAttribute('data-page');
+                            
+                            // 设置页面标题
+                            let pageTitle = this.querySelector('span').textContent.trim();
+                            document.getElementById('pageTitle').textContent = pageTitle;
+                            
+                            // 隐藏所有页面
+                            document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+                            
+                            // 显示选中的页面
+                            const selectedPage = document.getElementById(page + 'Page');
+                            if (selectedPage) {
+                                selectedPage.style.display = 'block';
+                                if (page === 'personnel') {
+                                    loadPersonnelData();
+                                }
+                            }
+                        }
+                    });
+                    
+                    // 处理子菜单项点击事件
+                    const submenuItems = item.querySelectorAll('.nav-submenu .submenu-item');
+                    submenuItems.forEach(subItem => {
+                        subItem.addEventListener('click', function(e) {
+                            e.stopPropagation(); // 阻止事件冒泡
+                            
+                            // 设置父菜单项为激活状态
+                            navItems.forEach(i => {
+                                i.classList.remove('active');
+                                i.classList.remove('expanded');
+                            });
+                            const parentItem = this.closest('.nav-item');
+                            parentItem.classList.add('active');
+                            parentItem.classList.add('expanded');
+                            
+                            // 清除所有子菜单项的高亮
+                            document.querySelectorAll('.submenu-item').forEach(si => {
+                                si.classList.remove('active');
+                            });
+                            
+                            // 设置当前子菜单项为高亮
+                            this.classList.add('active');
+                            
+                            // 获取子菜单对应的页面ID
+                            const subPage = this.getAttribute('data-page');
+                            document.getElementById('pageTitle').textContent = this.textContent;
+                            
+                            // 隐藏所有页面
+                            document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+                            
+                            // 显示选中的子页面
+                            const selectedSubPage = document.getElementById(subPage + 'Page');
+                            if (selectedSubPage) {
+                                selectedSubPage.style.display = 'block';
+                                // 根据页面类型加载不同的数据
+                                if (subPage === 'deviceBasicParams') {
+                                    // 加载设备列表数据
+                                    loadDevicesData();
+                                }
+                            }
+                        });
+                    });
+                }
+            });
+        }
+
+        // 退出登录
+        function logout() {
+            // 调用后端登出API
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                },
+                // 添加凭据，确保cookie可以被发送
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .finally(() => {
+                // 无论API调用成功与否，都清除本地存储并跳转到登录页
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = '/';
+            });
+        }
+        // 创建通用的API请求函数，减少重复代码
+        async function fetchAPI(url, options = {}) {
+            // 默认添加认证头
+            const headers = {
+                ...options.headers || {},
+                'Authorization': 'Bearer ' + localStorage.getItem('token')
+            };
+            
+            // 如果是POST或PUT请求，默认添加Content-Type
+            if ((options.method === 'POST' || options.method === 'PUT') && options.body && !options.body.toString().includes('FormData')) {
+                headers['Content-Type'] = 'application/json';
+            }
+            
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers,
+                    // 添加凭据，确保cookie可以被发送
+                    credentials: 'same-origin'
+                });
+                
+                // 如果收到401未授权响应，重定向到登录页面
+                if (response.status === 401) {
+                    console.error('认证失败，重定向到登录页面');
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    window.location.href = '/';
+                    return null;
+                }
+                
+                const responseData = await response.json().catch(() => ({}));
+                
+                if (!response.ok) {
+                    throw new Error(responseData.message || `请求失败: ${response.status}`);
+                }
+                
+                // 如果响应为空，返回null
+                if (response.status === 204) {
+                    return null;
+                }
+                
+                return responseData;
+            } catch (error) {
+                console.error('API请求失败:', error);
+                throw error;
+            }
+        }
+        
+        // 加载人员数据
+        async function loadPersonnelData() {
+            try {
+                const data = await fetchAPI('/api/personnel');
+                updatePersonnelTable(data);
+            } catch (error) {
+                alert('加载人员数据失败');
+            }
+        }
+        
+        // 显示编辑人员模态框
+        async function editPersonnel(employeeId) {
+            try {
+                const person = await fetchAPI(`/api/personnel/${employeeId}`);
+                
+                document.getElementById('modalTitle').textContent = '编辑人员';
+                document.getElementById('editMode').value = 'edit';
+                document.getElementById('employeeId').value = person.employee_id;
+                document.getElementById('employeeId').disabled = true;
+                document.getElementById('name').value = person.name;
+                document.getElementById('department').value = person.department;
+                document.getElementById('position').value = person.position;
+                document.getElementById('phone').value = person.contact_phone || '';
+                document.getElementById('email').value = person.email || '';
+                
+                document.getElementById('personnelModal').style.display = 'block';
+            } catch (error) {
+                alert('获取人员信息失败');
+            }
+        }
+        
+        // 删除人员
+        async function deletePersonnel(employeeId) {
+            if (!confirm('确定要删除该人员吗？')) return;
+            
+            try {
+                await fetchAPI(`/api/personnel/${employeeId}`, { method: 'DELETE' });
+                alert('删除成功');
+                loadPersonnelData();
+            } catch (error) {
+                alert('删除人员失败');
+            }
+        }
+        
+        // 处理表单提交
+        async function handlePersonnelSubmit(event) {
+            event.preventDefault();
+            
+            const formData = {
+                employee_id: document.getElementById('employeeId').value,
+                name: document.getElementById('name').value,
+                department: document.getElementById('department').value,
+                position: document.getElementById('position').value,
+                contact_phone: document.getElementById('phone').value,
+                email: document.getElementById('email').value
+            };
+            
+            const editMode = document.getElementById('editMode').value;
+            const url = editMode === 'add' ? '/api/personnel' : `/api/personnel/${formData.employee_id}`;
+            const method = editMode === 'add' ? 'POST' : 'PUT';
+            
+            try {
+                await fetchAPI(url, {
+                    method,
+                    body: JSON.stringify(formData)
+                });
+                
+                alert(editMode === 'add' ? '添加成功' : '更新成功');
+                closePersonnelModal();
+                loadPersonnelData();
+            } catch (error) {
+                alert('保存人员信息失败');
+            }
+        }
+        
+        // 搜索人员
+        async function searchPersonnel() {
+            const keyword = document.getElementById('searchKeyword').value.trim();
+            const department = document.getElementById('searchDepartment').value;
+            
+            try {
+                const data = await fetchAPI(`/api/personnel/search?keyword=${encodeURIComponent(keyword)}&department=${encodeURIComponent(department)}`);
+                updatePersonnelTable(data);
+            } catch (error) {
+                alert('搜索人员失败');
+            }
+        }
+
+        // 重置搜索
+        function resetSearch() {
+            document.getElementById('searchKeyword').value = '';
+            document.getElementById('searchDepartment').value = '';
+            loadPersonnelData();
+        }
+
+        // 更新人员表格
+        function updatePersonnelTable(data) {
+            const tableBody = document.getElementById('personnelTableBody');
+            tableBody.innerHTML = '';
+            
+            if (data.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = '<td colspan="7" style="text-align: center;">没有找到匹配的记录</td>';
+                tableBody.appendChild(row);
+                return;
+            }
+            
+            data.forEach(person => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${person.employee_id}</td>
+                    <td>${person.name}</td>
+                    <td>${person.department}</td>
+                    <td>${person.position}</td>
+                    <td>${person.contact_phone || '-'}</td>
+                    <td>${person.email || '-'}</td>
+                    <td>
+                        <button class="btn btn-primary btn-sm" onclick="editPersonnel('${person.employee_id}')">编辑</button>
+                        <button class="btn btn-danger btn-sm" onclick="deletePersonnel('${person.employee_id}')">删除</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // 显示添加人员模态框
+        function showAddPersonnelModal() {
+            document.getElementById('modalTitle').textContent = '添加人员';
+            document.getElementById('editMode').value = 'add';
+            document.getElementById('employeeId').value = '';
+            document.getElementById('employeeId').disabled = false;
+            document.getElementById('name').value = '';
+            document.getElementById('department').value = '信息部';
+            document.getElementById('position').value = '';
+            document.getElementById('phone').value = '';
+            document.getElementById('email').value = '';
+            
+            document.getElementById('personnelModal').style.display = 'block';
+        }
+        
+        // 关闭人员模态框
+        function closePersonnelModal() {
+            document.getElementById('personnelModal').style.display = 'none';
+        }
+
+        // 页面加载完成后初始化
+        window.addEventListener('load', function() {
+            loadUserInfo();
+            initCharts();
+            initNavigation();
+            
+            // 检查URL参数，确定是否需要显示特定页面
+            const urlParams = new URLSearchParams(window.location.search);
+            const showPage = urlParams.get('page');
+            
+            if (showPage === 'devices') {
+                // 激活设备中心菜单
+                const deviceItem = document.querySelector('.nav-item[data-page="device"]');
+                if (deviceItem) {
+                    // 模拟点击设备中心菜单
+                    deviceItem.click();
+                }
+            } else {
+            // 如果设备中心菜单项是激活状态，自动展开子菜单
+            const activeDeviceItem = document.querySelector('.nav-item[data-page="device"].active');
+            if (activeDeviceItem) {
+                activeDeviceItem.classList.add('expanded');
+                
+                // 检查当前页面是否是设备列表页面
+                const deviceBasicParamsPage = document.getElementById('deviceBasicParamsPage');
+                if (deviceBasicParamsPage && deviceBasicParamsPage.style.display === 'block') {
+                    // 设置设备列表子菜单项为高亮
+                    const deviceBasicParamsItem = document.querySelector('.submenu-item[data-page="deviceBasicParams"]');
+                    if (deviceBasicParamsItem) {
+                        deviceBasicParamsItem.classList.add('active');
+                    }
+                        
+                        // 加载设备列表数据
+                        loadDevicesData();
+                    }
+                }
+            }
+            
+            // 初始化表单标签切换功能
+            initFormTabs();
+        });
+        
+        // 初始化表单标签切换功能
+        function initFormTabs() {
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // 移除所有标签和内容的激活状态
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    // 激活点击的标签和对应的内容
+                    this.classList.add('active');
+                    const tabName = this.getAttribute('data-tab');
+                    document.querySelector(`.tab-content[data-tab="${tabName}"]`).classList.add('active');
+                });
+            });
+        }
+        
+        // 加载设备列表数据
+        async function loadDevicesData(page = 1) {
+            console.log('开始加载设备数据，页码:', page);
+            try {
+                const response = await fetchAPI(`/api/devices?page=${page}&per_page=10`);
+                console.log('设备数据加载成功:', response);
+                updateDeviceTable(response.data);
+                createPagination(response.pagination, loadDevicesData);
+            } catch (error) {
+                console.error('加载设备数据失败:', error);
+                alert('加载设备数据失败');
+            }
+        }
+        
+        // 更新设备表格
+        function updateDeviceTable(data) {
+            const tableBody = document.getElementById('deviceTableBody');
+            tableBody.innerHTML = '';
+            
+            if (!data || data.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td colspan="7" style="text-align: center; padding: 30px;">
+                        <div class="empty-state">
+                            <i class="fa fa-cog fa-3x" style="margin-bottom: 15px; color: #ccc;"></i>
+                            <p>暂无设备数据</p>
+                            <button class="btn btn-primary" onclick="showAddDeviceModal()">添加设备</button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+                return;
+            }
+            
+            data.forEach(device => {
+                const row = document.createElement('tr');
+                // 为不同状态设置不同的样式类
+                const statusClass = getStatusClass(device.status);
+                
+                row.innerHTML = `
+                    <td>${device.device_name}</td>
+                    <td>${device.device_number}</td>
+                    <td>${device.device_type}</td>
+                    <td><span class="status-badge ${statusClass}">${device.status || '正常运行'}</span></td>
+                    <td>${device.responsible_person || '-'}</td>
+                    <td>${formatDateTime(device.create_time)}</td>
+                    <td>
+                        <button class="btn btn-info btn-sm" onclick="viewDeviceDetail(${device.device_id})">查看</button>
+                        <button class="btn btn-primary btn-sm" onclick="editDevice(${device.device_id})">编辑</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteDevice(${device.device_id})">删除</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+        
+        // 获取状态样式类
+        function getStatusClass(status) {
+            switch (status) {
+                case '正常运行': return 'status-normal';
+                case '故障': return 'status-error';
+                case '维修中': return 'status-maintenance';
+                case '待机': return 'status-standby';
+                default: return 'status-normal';
+            }
+        }
+        
+        // 创建分页控件
+        function createPagination(pagination, loadFunction) {
+            if (!pagination) return;
+            
+            const paginationElement = document.getElementById('devicePagination');
+            paginationElement.innerHTML = '';
+            
+            if (pagination.total <= pagination.per_page) return;
+            
+            // 构建分页HTML
+            let paginationHtml = '<div class="pagination-container">';
+            
+            // 上一页按钮
+            paginationHtml += `<button class="pagination-btn ${pagination.page <= 1 ? 'disabled' : ''}" 
+                                  ${pagination.page <= 1 ? 'disabled' : `onclick="loadDevicesData(${pagination.page - 1})"`}>
+                               &laquo; 上一页
+                               </button>`;
+            
+            // 页码按钮
+            const maxPages = Math.min(pagination.pages, 5);
+            let startPage = Math.max(1, pagination.page - 2);
+            const endPage = Math.min(startPage + maxPages - 1, pagination.pages);
+            
+            if (endPage - startPage < maxPages - 1) {
+                startPage = Math.max(1, endPage - maxPages + 1);
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHtml += `<button class="pagination-btn ${pagination.page === i ? 'active' : ''}" 
+                                    onclick="loadDevicesData(${i})">${i}</button>`;
+            }
+            
+            // 下一页按钮
+            paginationHtml += `<button class="pagination-btn ${pagination.page >= pagination.pages ? 'disabled' : ''}"
+                                ${pagination.page >= pagination.pages ? 'disabled' : `onclick="loadDevicesData(${pagination.page + 1})"`}>
+                              下一页 &raquo;
+                              </button>`;
+            
+            paginationHtml += '</div>';
+            
+            paginationElement.innerHTML = paginationHtml;
+        }
+        
+        // 日期时间格式化函数
+        function formatDateTime(dateTimeStr) {
+            if (!dateTimeStr) return '-';
+            
+            const date = new Date(dateTimeStr);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            
+            return `${year}-${month}-${day} ${hours}:${minutes}`;
+        }
+        
+        // 格式化日期
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            
+            const date = new Date(dateStr);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            
+            return `${year}-${month}-${day}`;
+        }
+
+        // 显示添加设备模态框
+        function showAddDeviceModal() {
+            document.getElementById('deviceModalTitle').textContent = '添加设备';
+            document.getElementById('deviceEditMode').value = 'add';
+            document.getElementById('deviceId').value = '';
+            
+            // 重置表单
+            document.getElementById('deviceForm').reset();
+            
+            // 清除图片预览
+            document.getElementById('imagePreview').innerHTML = '';
+            
+            // 默认显示第一个标签
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.querySelector('.tab[data-tab="basic"]').classList.add('active');
+            document.querySelector('.tab-content[data-tab="basic"]').classList.add('active');
+            
+            // 初始化文件上传监听
+            initFileUpload();
+            
+            document.getElementById('deviceModal').style.display = 'block';
+        }
+        
+        // 初始化文件上传监听
+        function initFileUpload() {
+            const fileInput = document.getElementById('imagePath');
+            fileInput.addEventListener('change', handleFileSelect);
+        }
+
+        // 处理文件选择
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            // 检查文件类型
+            const fileType = file.type;
+            if (!fileType.match('image.*')) {
+                alert('请选择图片文件');
+                event.target.value = '';
+                return;
+            }
+            
+            // 检查文件大小（限制为5MB）
+            if (file.size > 5 * 1024 * 1024) {
+                alert('文件大小不能超过5MB');
+                event.target.value = '';
+                return;
+            }
+            
+            // 显示图片预览
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imgPreview = document.getElementById('imagePreview');
+                imgPreview.innerHTML = `<img src="${e.target.result}" alt="图片预览">`;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 处理设备表单提交
+        async function handleDeviceSubmit(event) {
+            event.preventDefault();
+            
+            // 验证必填字段
+            const deviceName = document.getElementById('deviceName').value.trim();
+            const deviceNumber = document.getElementById('deviceNumber').value.trim();
+            const deviceType = document.getElementById('deviceType').value;
+            
+            if (!deviceName || !deviceNumber || !deviceType) {
+                alert('请填写必填字段');
+                return;
+            }
+            
+            try {
+                // 先处理文件上传
+                let imagePath = null;
+                const fileInput = document.getElementById('imagePath');
+                if (fileInput.files.length > 0) {
+                    try {
+                        const uploadResponse = await uploadFile(fileInput.files[0]);
+                        imagePath = uploadResponse.file_path;
+                    } catch (error) {
+                        console.error('上传图片失败:', error);
+                        alert('上传图片失败: ' + (error.message || '未知错误'));
+                        return;
+                    }
+                }
+                
+                // 获取表单数据
+                const formData = {
+                    device_name: deviceName,
+                    device_number: deviceNumber,
+                    device_type: deviceType,
+                    responsible_person: document.getElementById('responsiblePerson').value.trim() || null,
+                    brand: document.getElementById('brand').value.trim() || null,
+                    model: document.getElementById('model').value.trim() || null,
+                    status: document.getElementById('status').value,
+                    location: document.getElementById('location').value.trim() || null
+                };
+                
+                // 日期字段处理
+                const purchaseDate = document.getElementById('purchaseDate').value;
+                if (purchaseDate) {
+                    formData.purchase_date = purchaseDate;
+                }
+                
+                const operationDate = document.getElementById('operationDate').value;
+                if (operationDate) {
+                    formData.operation_date = operationDate;
+                }
+                
+                // 其他可选字段
+                const warrantyPeriod = document.getElementById('warrantyPeriod').value.trim();
+                if (warrantyPeriod) {
+                    formData.warranty_period = warrantyPeriod;
+                }
+                
+                const supplierInfo = document.getElementById('supplierInfo').value.trim();
+                if (supplierInfo) {
+                    formData.supplier_info = supplierInfo;
+                }
+                
+                const maintenancePerson = document.getElementById('maintenancePerson').value.trim();
+                if (maintenancePerson) {
+                    formData.maintenance_person = maintenancePerson;
+                }
+                
+                const maintenanceCycle = document.getElementById('maintenanceCycle').value.trim();
+                if (maintenanceCycle) {
+                    formData.maintenance_cycle = maintenanceCycle;
+                }
+                
+                const notes = document.getElementById('notes').value.trim();
+                if (notes) {
+                    formData.notes = notes;
+                }
+                
+                // 如果有上传图片，添加图片路径
+                if (imagePath) {
+                    formData.image_path = imagePath;
+                }
+                
+                // 确定请求方法和URL
+                const editMode = document.getElementById('deviceEditMode').value;
+                const deviceId = document.getElementById('deviceId').value;
+                const url = editMode === 'add' ? '/api/devices' : `/api/devices/${deviceId}`;
+                const method = editMode === 'add' ? 'POST' : 'PUT';
+                
+                console.log('提交数据:', JSON.stringify(formData, null, 2));
+                
+                // 发送请求
+                const response = await fetchAPI(url, {
+                    method,
+                    body: JSON.stringify(formData)
+                });
+                
+                console.log('服务器响应:', response);
+                alert(editMode === 'add' ? '添加设备成功' : '更新设备成功');
+                closeDeviceModal();
+                loadDevicesData();
+            } catch (error) {
+                console.error('保存设备信息失败:', error);
+                let errorMsg = '保存设备信息失败';
+                if (error.message) {
+                    errorMsg += ': ' + error.message;
+                }
+                alert(errorMsg);
+            }
+        }
+        
+        // 上传文件
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('token')
+                },
+                body: formData,
+                // 添加凭据，确保cookie可以被发送
+                credentials: 'same-origin'
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || '上传失败');
+            }
+            
+            const result = await response.json();
+            return result;
+        }
+        
+        // 查看设备详情
+        async function viewDeviceDetail(deviceId) {
+            try {
+                const device = await fetchAPI(`/api/devices/${deviceId}`);
+                
+                // 填充基本信息
+                document.getElementById('detail_device_name').textContent = device.device_name || '-';
+                document.getElementById('detail_device_number').textContent = device.device_number || '-';
+                document.getElementById('detail_device_type').textContent = device.device_type || '-';
+                document.getElementById('detail_responsible_person').textContent = device.responsible_person || '-';
+                document.getElementById('detail_create_time').textContent = formatDateTime(device.create_time) || '-';
+                document.getElementById('detail_update_time').textContent = formatDateTime(device.update_time) || '-';
+                document.getElementById('detail_brand').textContent = device.brand || '-';
+                document.getElementById('detail_model').textContent = device.model || '-';
+                
+                // 处理图片
+                if (device.image_path) {
+                    document.getElementById('detail_device_image').src = device.image_path;
+                } else {
+                    document.getElementById('detail_device_image').src = "/static/images/no-image.png";
+                }
+                
+                // 填充运行状态
+                document.getElementById('detail_status').textContent = device.status || '正常运行';
+                document.getElementById('detail_location').textContent = device.location || '-';
+                
+                // 如果有投运日期且状态为正常运行，显示计算后的运行时间
+                if (device.running_time) {
+                    document.getElementById('detail_running_time').textContent = `${device.running_time} 小时 (自动计算)`;
+                } else {
+                    document.getElementById('detail_running_time').textContent = '0 小时';
+                }
+                
+                // 填充维护与管理
+                document.getElementById('detail_purchase_date').textContent = formatDate(device.purchase_date) || '-';
+                document.getElementById('detail_operation_date').textContent = formatDate(device.operation_date) || '-';
+                document.getElementById('detail_warranty_period').textContent = device.warranty_period || '-';
+                document.getElementById('detail_supplier_info').textContent = device.supplier_info || '-';
+                document.getElementById('detail_maintenance_person').textContent = device.maintenance_person || '-';
+                document.getElementById('detail_maintenance_cycle').textContent = device.maintenance_cycle || '-';
+                
+                // 填充附加信息
+                document.getElementById('detail_notes').textContent = device.notes || '-';
+                
+                // 显示详情模态框
+                document.getElementById('deviceDetailTitle').textContent = `设备详情: ${device.device_name}`;
+                document.getElementById('deviceDetailModal').style.display = 'block';
+            } catch (error) {
+                console.error('获取设备详情失败:', error);
+                alert('获取设备详情失败');
+            }
+        }
+        
+        // 关闭设备详情模态框
+        function closeDeviceDetailModal() {
+            document.getElementById('deviceDetailModal').style.display = 'none';
+        }
+        
+        // 编辑设备
+        async function editDevice(deviceId) {
+            try {
+                const device = await fetchAPI(`/api/devices/${deviceId}`);
+                
+                document.getElementById('deviceModalTitle').textContent = '编辑设备';
+                document.getElementById('deviceEditMode').value = 'edit';
+                document.getElementById('deviceId').value = device.device_id;
+                
+                // 填充表单数据
+                document.getElementById('deviceName').value = device.device_name || '';
+                document.getElementById('deviceNumber').value = device.device_number || '';
+                document.getElementById('deviceType').value = device.device_type || '锅炉';
+                document.getElementById('responsiblePerson').value = device.responsible_person || '';
+                document.getElementById('brand').value = device.brand || '';
+                document.getElementById('model').value = device.model || '';
+                document.getElementById('status').value = device.status || '正常运行';
+                document.getElementById('location').value = device.location || '';
+                document.getElementById('purchaseDate').value = device.purchase_date ? device.purchase_date.split('T')[0] : '';
+                document.getElementById('operationDate').value = device.operation_date ? device.operation_date.split('T')[0] : '';
+                document.getElementById('warrantyPeriod').value = device.warranty_period || '';
+                document.getElementById('supplierInfo').value = device.supplier_info || '';
+                document.getElementById('maintenancePerson').value = device.maintenance_person || '';
+                document.getElementById('maintenanceCycle').value = device.maintenance_cycle || '';
+                document.getElementById('notes').value = device.notes || '';
+                
+                // 显示图片预览
+                const imgPreview = document.getElementById('imagePreview');
+                if (device.image_path) {
+                    imgPreview.innerHTML = `<img src="${device.image_path}" alt="设备图片">`;
+                } else {
+                    imgPreview.innerHTML = '';
+                }
+                
+                // 初始化文件上传监听
+                initFileUpload();
+                
+                // 显示第一个标签
+                document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                document.querySelector('.tab[data-tab="basic"]').classList.add('active');
+                document.querySelector('.tab-content[data-tab="basic"]').classList.add('active');
+                
+                // 显示模态框
+                document.getElementById('deviceModal').style.display = 'block';
+            } catch (error) {
+                console.error('获取设备详情失败:', error);
+                alert('获取设备详情失败');
+            }
+        }
+        
+        // 删除设备
+        async function deleteDevice(deviceId) {
+            if (!confirm('确定要删除该设备吗？此操作不可恢复。')) return;
+            
+            try {
+                await fetchAPI(`/api/devices/${deviceId}`, { method: 'DELETE' });
+                alert('删除设备成功');
+                loadDevicesData();
+            } catch (error) {
+                console.error('删除设备失败:', error);
+                alert('删除设备失败');
+            }
+        }
+        
+        // 搜索设备
+        async function searchDevices() {
+            const keyword = document.getElementById('deviceSearchKeyword').value.trim();
+            const deviceType = document.getElementById('deviceTypeFilter').value;
+            const status = document.getElementById('statusFilter').value;
+            
+            try {
+                let url = '/api/devices/search?';
+                if (keyword) url += `keyword=${encodeURIComponent(keyword)}&`;
+                if (deviceType) url += `device_type=${encodeURIComponent(deviceType)}&`;
+                if (status) url += `status=${encodeURIComponent(status)}&`;
+                
+                const devices = await fetchAPI(url);
+                updateDeviceTable(devices);
+                
+                // 隐藏分页
+                document.getElementById('devicePagination').innerHTML = '';
+            } catch (error) {
+                console.error('搜索设备失败:', error);
+                alert('搜索设备失败');
+            }
+        }
+        
+        // 重置设备搜索
+        function resetDeviceSearch() {
+            document.getElementById('deviceSearchKeyword').value = '';
+            document.getElementById('deviceTypeFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            loadDevicesData();
+        }
+
+        // 关闭设备模态框
+        function closeDeviceModal() {
+            document.getElementById('deviceModal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
