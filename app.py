@@ -415,16 +415,14 @@ def get_device_by_id(device_id):
         device = execute_db_query('SELECT * FROM devices WHERE device_id = %s', (device_id,), fetch_one=True)
         
         if device:
-            # 如果设备存在，计算运行时间
+            # 如果设备存在且正常运行，计算精确的运行时间
             if device['operation_date'] and device['status'] == '正常运行':
                 # 将operation_date转换为datetime对象
                 operation_date = datetime.strptime(device['operation_date'].strftime('%Y-%m-%d'), '%Y-%m-%d')
-                # 计算当前日期与投运日期之间的天数差
-                days_running = (datetime.now() - operation_date).days
-                # 将天数转换为小时
-                hours_running = days_running * 24
-                # 更新设备信息中的运行时间
-                device['running_time'] = hours_running
+                
+                # 计算精确到秒的运行时间（用于实时计时器）
+                seconds_running = int((datetime.now() - operation_date).total_seconds())
+                device['real_time_running_seconds'] = seconds_running
             
             return jsonify(device)
         else:
@@ -454,23 +452,6 @@ def add_device():
         if exists:
             return jsonify({'message': '设备编号已存在'}), 400
 
-        # 如果提供了operation_date和设备状态为"正常运行"，自动计算running_time
-        if data.get('operation_date') and data.get('status', '正常运行') == '正常运行':
-            try:
-                # 将operation_date转换为datetime对象
-                operation_date = datetime.strptime(data['operation_date'], '%Y-%m-%d')
-                # 计算当前日期与投运日期之间的天数差
-                days_running = (datetime.now() - operation_date).days
-                # 将天数转换为小时并更新数据
-                data['running_time'] = days_running * 24
-            except Exception as e:
-                print(f"计算运行时间错误: {str(e)}")
-                # 如果日期格式有误，设置为0
-                data['running_time'] = 0
-        else:
-            # 如果没有投运日期或状态不是"正常运行"，运行时间为0
-            data['running_time'] = 0
-            
         # 构建SQL插入语句
         fields = []
         placeholders = []
@@ -532,23 +513,6 @@ def update_device(device_id):
             if conflict:
                 return jsonify({'message': '设备编号已被其他设备使用'}), 400
 
-        # 如果提供了operation_date和设备状态为"正常运行"，自动计算running_time
-        if data.get('operation_date') and data.get('status', '正常运行') == '正常运行':
-            try:
-                # 将operation_date转换为datetime对象
-                operation_date = datetime.strptime(data['operation_date'], '%Y-%m-%d')
-                # 计算当前日期与投运日期之间的天数差
-                days_running = (datetime.now() - operation_date).days
-                # 将天数转换为小时并更新数据
-                data['running_time'] = days_running * 24
-            except Exception as e:
-                print(f"计算运行时间错误: {str(e)}")
-                # 如果日期格式有误，设置为0
-                data['running_time'] = 0
-        elif data.get('status') and data.get('status') != '正常运行':
-            # 如果设备状态不是"正常运行"，运行时间为0
-            data['running_time'] = 0
-            
         # 构建更新语句
         set_clauses = []
         values = []
