@@ -9,7 +9,22 @@
     <!-- 添加图表库 -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
-        /* 现有样式保持不变 */
+        /* 图片状态提示样式 */
+        #imageStatus {
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            background-color: #f6ffed;
+            border: 1px solid #b7eb8f;
+            border-radius: 4px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+        }
+        
+        #imageStatus i {
+            margin-right: 8px;
+            font-size: 16px;
+        }
         
         /* 实时计时器样式 */
         .realtime-counter {
@@ -43,6 +58,28 @@
         
         #seconds {
             animation: pulse 1s infinite;
+        }
+        
+        /* 添加底部边距，防止按钮被任务栏遮挡 */
+        .modal-content {
+            padding-bottom: 60px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .form-group:last-child {
+            margin-bottom: 40px;
+        }
+        
+        /* 确保设备编辑模态框按钮区始终可见 */
+        #deviceForm .form-group:last-child {
+            position: sticky;
+            bottom: 0;
+            background-color: #fff;
+            padding: 15px 0;
+            margin-top: 20px;
+            border-top: 1px solid #e8e8e8;
+            z-index: 10;
         }
     </style>
 </head>
@@ -415,27 +452,25 @@
                     
                     <div class="tab-content active" data-tab="basic">
                         <div class="form-group">
-                            <label for="deviceName">设备名称 <span class="required">*</span></label>
+                            <label for="deviceName" class="required">设备名称</label>
                             <input type="text" id="deviceName" class="form-control" required>
                         </div>
                         <div class="form-group">
-                            <label for="deviceNumber">设备编号 <span class="required">*</span></label>
+                            <label for="deviceNumber" class="required">设备编号</label>
                             <input type="text" id="deviceNumber" class="form-control" required>
                         </div>
                         <div class="form-group">
-                            <label for="deviceType">设备类型 <span class="required">*</span></label>
+                            <label for="deviceType" class="required">设备类型</label>
                             <select id="deviceType" class="form-control" required>
                                 <option value="锅炉">锅炉</option>
-                                <option value="燃烧器">燃烧器</option>
+                                <option value="汽轮机">汽轮机</option>
+                                <option value="发电机">发电机</option>
+                                <option value="冷却塔">冷却塔</option>
                                 <option value="空气预热器">空气预热器</option>
-                                <option value="给水泵">给水泵</option>
-                                <option value="引风机">引风机</option>
-                                <option value="送风机">送风机</option>
-                                <option value="一次风机与煤粉机">一次风机与煤粉机</option>
-                                <option value="磨煤机">磨煤机</option>
-                                <option value="给煤机">给煤机</option>
-                                <option value="给粉机">给粉机</option>
-                                <option value="吹灰器">吹灰器</option>
+                                <option value="脱硫设备">脱硫设备</option>
+                                <option value="除尘器">除尘器</option>
+                                <option value="水处理设备">水处理设备</option>
+                                <option value="其他">其他</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -452,6 +487,9 @@
                         </div>
                         <div class="form-group">
                             <label for="imagePath">设备图片</label>
+                            <div id="imageStatus" style="margin-bottom: 5px; color: #52c41a; display: none;">
+                                <i class="fa fa-check-circle"></i> 已上传图片，选择新文件可替换当前图片
+                            </div>
                             <input type="file" id="imagePath" class="form-control">
                             <div id="imagePreview" class="image-preview"></div>
                         </div>
@@ -470,9 +508,6 @@
                         <div class="form-group">
                             <label for="location">安装位置</label>
                             <input type="text" id="location" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <p class="form-help">注意：运行时间根据投运日期和设备状态实时计算，支持精确到秒的实时计时，无需手动填写。</p>
                         </div>
                     </div>
                     
@@ -866,6 +901,18 @@
             };
             
             const editMode = document.getElementById('editMode').value;
+            
+            // 添加客户端时间戳
+            const currentTimestamp = Math.floor(Date.now() / 1000); // Unix时间戳（秒）
+            if (editMode === 'add') {
+                // 新增人员时，同时设置创建时间和更新时间
+                formData.create_time = currentTimestamp;
+                formData.update_time = currentTimestamp;
+            } else {
+                // 更新人员时，只更新更新时间
+                formData.update_time = currentTimestamp;
+            }
+            
             const url = editMode === 'add' ? '/api/personnel' : `/api/personnel/${formData.employee_id}`;
             const method = editMode === 'add' ? 'POST' : 'PUT';
             
@@ -1126,7 +1173,20 @@
         function formatDateTime(dateTimeStr) {
             if (!dateTimeStr) return '-';
             
-            const date = new Date(dateTimeStr);
+            let date;
+            // 判断是数字（Unix时间戳）还是字符串（ISO日期格式）
+            if (typeof dateTimeStr === 'number') {
+                // 将Unix时间戳（秒）转换为毫秒
+                date = new Date(dateTimeStr * 1000);
+            } else {
+                date = new Date(dateTimeStr);
+            }
+            
+            // 检查日期是否有效
+            if (isNaN(date.getTime())) {
+                return '-';
+            }
+            
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
@@ -1140,7 +1200,20 @@
         function formatDate(dateStr) {
             if (!dateStr) return '-';
             
-            const date = new Date(dateStr);
+            let date;
+            // 判断是数字（Unix时间戳）还是字符串（ISO日期格式）
+            if (typeof dateStr === 'number') {
+                // 将Unix时间戳（秒）转换为毫秒
+                date = new Date(dateStr * 1000);
+            } else {
+                date = new Date(dateStr);
+            }
+            
+            // 检查日期是否有效
+            if (isNaN(date.getTime())) {
+                return '-';
+            }
+            
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
@@ -1159,6 +1232,9 @@
             
             // 清除图片预览
             document.getElementById('imagePreview').innerHTML = '';
+            
+            // 隐藏图片状态提示
+            document.getElementById('imageStatus').style.display = 'none';
             
             // 默认显示第一个标签
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
@@ -1203,6 +1279,11 @@
             reader.onload = function(e) {
                 const imgPreview = document.getElementById('imagePreview');
                 imgPreview.innerHTML = `<img src="${e.target.result}" alt="图片预览">`;
+                
+                // 更新图片状态提示为"已选择新图片"
+                const imageStatus = document.getElementById('imageStatus');
+                imageStatus.innerHTML = '<i class="fa fa-check-circle"></i> 已选择新图片，保存后将替换原图片';
+                imageStatus.style.display = 'block';
             };
             reader.readAsDataURL(file);
         }
@@ -1248,6 +1329,19 @@
                     location: document.getElementById('location').value.trim() || null
                 };
                 
+                // 添加客户端时间戳
+                const currentTimestamp = Math.floor(Date.now() / 1000); // Unix时间戳（秒）
+                const editMode = document.getElementById('deviceEditMode').value;
+                
+                if (editMode === 'add') {
+                    // 新增设备时，同时设置创建时间和更新时间
+                    formData.create_time = currentTimestamp;
+                    formData.update_time = currentTimestamp;
+                } else {
+                    // 更新设备时，只更新更新时间
+                    formData.update_time = currentTimestamp;
+                }
+                
                 // 日期字段处理
                 const purchaseDate = document.getElementById('purchaseDate').value;
                 if (purchaseDate) {
@@ -1291,7 +1385,6 @@
                 }
                 
                 // 确定请求方法和URL
-                const editMode = document.getElementById('deviceEditMode').value;
                 const deviceId = document.getElementById('deviceId').value;
                 const url = editMode === 'add' ? '/api/devices' : `/api/devices/${deviceId}`;
                 const method = editMode === 'add' ? 'POST' : 'PUT';
@@ -1466,10 +1559,14 @@
                 
                 // 显示图片预览
                 const imgPreview = document.getElementById('imagePreview');
+                const imageStatus = document.getElementById('imageStatus');
                 if (device.image_path) {
                     imgPreview.innerHTML = `<img src="${device.image_path}" alt="设备图片">`;
+                    // 显示图片状态提示
+                    imageStatus.style.display = 'block';
                 } else {
                     imgPreview.innerHTML = '';
+                    imageStatus.style.display = 'none';
                 }
                 
                 // 初始化文件上传监听
